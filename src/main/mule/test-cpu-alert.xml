@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="8c1109ad-4a83-4ff2-98df-c19aa8fc21af" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<flow name="test-cpu-alertFlow" doc:id="a3fcb200-b835-4e90-802e-6482fcdc5d3a">
+		<scheduler doc:name="Scheduler" doc:id="a3e3a5ba-c95a-4122-8d10-001eff5bbc8d" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="1"/>
+			</scheduling-strategy>
+		</scheduler>
+		<flow-ref doc:name="Flow Reference" doc:id="8e6fdb84-1c5f-40de-b9d9-c4c43b04d1be" name="sub-flow-workhard"/>
+	</flow>
+	<sub-flow name="sub-flow-workhard" doc:id="21c18de5-f8fb-415e-9b33-78b949ddc4ff" >
+		<async doc:name="Async" doc:id="de82b463-d6df-4243-8b22-588f9caa84d9" maxConcurrency="100">
+			<until-successful maxRetries="1000000" doc:name="Until Successful" doc:id="2868bcab-921a-4e13-bfc0-e237273aaeb1" millisBetweenRetries="0">
+			<logger level="INFO" doc:name="Logger" doc:id="5091ee99-6d36-47c6-ad52-da9ed215679b" message="test" />
+			<flow-ref doc:name="Flow Reference" doc:id="e9ebb254-44fb-4e9d-8574-e25d194e0a0e" name="sub-flow-transform" />
+		</until-successful>
+		</async>
+	</sub-flow>
+	<sub-flow name="sub-flow-transform" doc:id="634cb084-bd21-45dc-8f25-e5b693e35a6f" >
+		<ee:transform doc:name="Transform Message" doc:id="c39e0634-21f8-4f33-8968-e47659e1e1d8">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+import dw::Crypto
+var strCharSet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' ++ 'abcdefghijklmnopqrstuvwxyz' ++ '0123456789'
+var strCharSetLength = sizeOf(strCharSet) - 1
+var intLength = 4096
+---
+{ "HMACWith" : Crypto::HMACWith((1 to intLength map strCharSet[randomInt(strCharSetLength)] joinBy '') 
+	as Binary, (1 to intLength map strCharSet[randomInt(strCharSetLength)] joinBy '') as Binary, "HmacSHA256"
+)
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<raise-error doc:name="Raise error" doc:id="ed8c3284-8863-4700-9f44-9683e8ac9a25" type="ANY"/>
+	</sub-flow>
+	<flow name="test-cpu-alert-health-check" doc:id="063a12f3-85d4-41c8-bc5c-0a09bf299ef1" >
+		<http:listener doc:name="Listener" doc:id="fc6a0001-85b1-4d02-8f81-c08b8d2d7a5e" config-ref="HTTP_Listener_config" path="/healthcheck"/>
+		<ee:transform doc:name="Transform Message" doc:id="283b575e-179f-4a70-adb2-bfe3fad635c8" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	healthCheckTime: now() as DateTime{format: "yyyy-MM-dd 'T' HH:MM:ss"}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
